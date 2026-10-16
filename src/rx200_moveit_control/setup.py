@@ -24,6 +24,7 @@ setup(
     },
     entry_points={
         'console_scripts': [
+            'rx200_gui = rx200_moveit_control.main_window:main',
         ],
     },
 )
