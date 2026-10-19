@@ -8,8 +8,10 @@ class InputManagerNode(Node):
     def __init__(self):
         super().__init__('input_manager')
         self.get_logger().info("Input Manager Node has been started.")
-        self.pub_ = self.create_publisher(Float32MultiArray, 'pick_place_request', 10)
-        self.status_subscriber_ = self.create_subscription(String, 'robot_status', self.status_callback, 10)
+        self.robot_publisher = self.create_publisher(Float32MultiArray, 'pick_place_request', 10)
+        self.status_subscriber = self.create_subscription(String, 'robot_status', self.status_callback, 10)
+        self.inputs_subscriber = self.create_subscription(Float32MultiArray, 'user_inputs', self.user_inputs_callback, 10)
+        self.gui_status_publisher = self.create_publisher(String, 'gui_status', 10)
 
     def validate_input(self, pick_x, pick_y, pick_z, place_x, place_y, place_z):
         coordinates = (pick_x, pick_y, pick_z, place_x, place_y, place_z)
@@ -28,19 +30,34 @@ class InputManagerNode(Node):
         if self.validate_input(pick_x, pick_y, pick_z, place_x, place_y, place_z):
             request_msg = Float32MultiArray()
             request_msg.data = [float(pick_x), float(pick_y), float(pick_z), float(place_x), float(place_y), float(place_z)]
-            self.get_logger().info(f"Sending request: {request_msg.data}")
-            self.pub_.publish(request_msg)
+            self.robot_publisher.publish(request_msg)
+            self.get_logger().info(f"Request sent: {request_msg.data}")
+            self.send_gui_status(f"Request sent: {request_msg.data}")
         else:
             self.get_logger().error("Request not sent due to invalid input.")
+            self.send_gui_status("Request not sent due to invalid input.")
 
     def status_callback(self, msg):
         self.get_logger().info(f"Robot status: {msg.data}")
+        self.send_gui_status(f"Robot status: {msg.data}")
+
+    def user_inputs_callback(self, msg):
+        coordinates = msg.data
+        if len(coordinates) != 6:
+            self.get_logger().warn(f"Expected 6 coordinates, received {len(coordinates)}.")
+            self.send_gui_status(f"Expected 6 coordinates, received {len(coordinates)}.")
+            return
+        self.send_request(*coordinates)
+
+    def send_gui_status(self, text):
+        msg = String()
+        msg.data = text
+        self.gui_status_publisher.publish(msg)
+
 
 def main(args = None):
     rclpy.init(args=args)
     node = InputManagerNode()
-    #print(node.validate_input(float('inf'), -0.2, 0, 0.2, 0.2, 0))
-    #node.send_request(float('nan'), -0.2, 0, 0.2, 0.2, 0)
     try:
         rclpy.spin(node)
     except KeyboardInterrupt:
