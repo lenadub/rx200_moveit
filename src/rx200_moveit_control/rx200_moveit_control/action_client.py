@@ -5,6 +5,7 @@ from moveit_msgs.action import MoveGroup
 from geometry_msgs.msg import PoseStamped, Quaternion
 from moveit_msgs.msg import MotionPlanRequest, Constraints, PositionConstraint, OrientationConstraint, JointConstraint
 from shape_msgs.msg import SolidPrimitive
+from std_msgs.msg import Float32MultiArray, String
 
 class rx200ActionClient(Node):
     def __init__(self):
@@ -34,6 +35,13 @@ class rx200ActionClient(Node):
 
         # Gripper joint
         self.gripper_joint = 'left_finger'
+
+        self.request_subscriber = self.create_subscription(
+            Float32MultiArray, 
+            'pick_place_request', 
+            self.pick_place_callback,
+            10
+        )
 
     def send_ee_pose(self, x, y, z, w=1.0):
         p = PoseStamped()
@@ -98,6 +106,29 @@ class rx200ActionClient(Node):
 
         future.add_done_callback(self._goal_response_cb)
 
+    def send_gr_pose(self, open=True):
+        req = MotionPlanRequest()
+        req.group_name = self.gripper_group
+
+        req.allowed_planning_time = 2.0
+        req.num_planning_attempts = 1
+        #
+        jc = JointConstraint()
+        jc.joint_name - self.gripper_group
+        jc.position = 0.35 if open else 0.0
+        jc.tolerance_above = 0.01
+        jc.tolerance_below = 0.01
+        jc.weight = 1.0
+        gc = Constraints()
+        gc.joint_constraints = [jc]
+        req.goal_constraints = [gc]
+        goal = MoveGroup.Goal()
+        goal.request = req
+        goal.planning_options.plan_only = False
+        future = self._client.send_goal_async(goal)
+        future.add_done_callback(self._goal_respone_cb)
+
+
     def _goal_respone_cb(self,future):
         goal_handle = future.result()
         if not goal_handle.accepted:
@@ -121,6 +152,18 @@ class rx200ActionClient(Node):
 
         else:
             self.get_logger().error('Robot Movement Failed')
+
+    def pick_place_callback(self,msg):
+        if len(msg.data) != 6:
+            self.get_logger().error('Invalid Request: Expected 6 Coords')
+            return
+
+        pick_x, pick_y, pick_z, place_x, place_y, place_z = msg.data
+
+        self.get_logger().info(f'Pick:({pick_x}, {pick_y}, {pick_z})')
+        self.get_logger().info(f'Place: ({place_x}, {place_y}, {place_z})')
+
+        
 
 
 
