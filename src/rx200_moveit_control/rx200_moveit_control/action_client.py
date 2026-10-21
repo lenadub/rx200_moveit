@@ -57,6 +57,17 @@ class RX200MoveItActionClient(Node):
         self.status_pub.publish(msg)
         self.get_logger().info(f'Robot status: {status}')
 
+    def validate_position(self, x, y):
+        distance = math.hypot(x ,y)
+        min_reach = 0.275
+        max_reach = 0.55
+
+        if distance < min_reach:
+            return False
+        if distance > max_reach:
+            return False
+        return True
+
     def check_moveit_server(self):
         if self._client.server_is_ready():
             self.server_timer.cancel()
@@ -86,6 +97,16 @@ class RX200MoveItActionClient(Node):
         ):
             self.get_logger().warning('Invalid quaternion: w must be +1 or -1')
             self.publish_status('FAILED')
+            return
+
+        if not self.validate_position(pick_x,pick_y):
+            self.get_logger().warning('Unreachable Pick Position')
+            self.publish_status('Failed')
+            return
+
+        if not self.validate_position(place_x, place_y):
+            self.get_logger().warning('Unreachable Place Position')
+            self.publish_status('Failed')
             return
 
         self.sequence_steps = [
