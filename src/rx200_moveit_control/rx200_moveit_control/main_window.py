@@ -28,7 +28,7 @@ class StatusBridge(QObject): # link between ros threads and gui
     
 class GuiNode(Node):
     def __init__(self, on_status):
-        super().__init__('rx200_gui - group 3')
+        super().__init__('rx200_gui')
         self.on_status = on_status
         self.pub = self.create_publisher(Float32MultiArray, 'user_inputs', 10)
         self.create_subscription(String, 'gui_status', self.status_callback, 10)
