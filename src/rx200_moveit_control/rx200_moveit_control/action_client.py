@@ -12,7 +12,8 @@ from moveit_msgs.msg import (
     JointConstraint,
     MoveItErrorCodes,
 )
-from moveit_msgs.action import MoveGroup
+from moveit_msgs.action import MoveGroup, ExecuteTrajectory
+from moveit_msgs.srv import GetCartesianPath
 from shape_msgs.msg import SolidPrimitive
 from geometry_msgs.msg import PoseStamped, Quaternion
 
@@ -23,6 +24,9 @@ class RX200MoveItActionClient(Node):
         super().__init__('action_client')
 
         self._client = ActionClient(self, MoveGroup, '/move_action')
+        # Additional MoveIt interfaces for short, straight-line movements.
+        self._cartesian_client = self.create_client(GetCartesianPath, '/compute_cartesian_path')
+        self._execute_client = ActionClient(self, ExecuteTrajectory, '/execute_trajectory')
 
         self.arm_group = 'interbotix_arm'
         self.gripper_group = 'interbotix_gripper'
@@ -62,9 +66,10 @@ class RX200MoveItActionClient(Node):
         min_reach = 0.275
         max_reach = 0.55
 
-        if distance < min_reach:
+        # Allow for tiny float32 rounding at the experimentally tested limits.
+        if distance < min_reach - 1e-5:
             return False
-        if distance > max_reach:
+        if distance > max_reach + 1e-5:
             return False
         return True
 
@@ -80,6 +85,11 @@ class RX200MoveItActionClient(Node):
 
         if not self._client.server_is_ready():
             self.get_logger().warning('Request ignored: MoveIt is unavailable')
+            self.publish_status('FAILED')
+            return
+
+        if not self._cartesian_client.service_is_ready() or not self._execute_client.server_is_ready():
+            self.get_logger().warning('Request ignored: Cartesian MoveIt interfaces unavailable')
             self.publish_status('FAILED')
             return
 
@@ -99,27 +109,27 @@ class RX200MoveItActionClient(Node):
             self.publish_status('FAILED')
             return
 
-        if not self.validate_position(pick_x,pick_y):
-            self.get_logger().warning('Unreachable Pick Position')
-            self.publish_status('Failed')
+        if not self.validate_position(pick_x, pick_y):
+            self.get_logger().warning('Pick position outside workspace')
+            self.publish_status('FAILED')
             return
 
         if not self.validate_position(place_x, place_y):
-            self.get_logger().warning('Unreachable Place Position')
-            self.publish_status('Failed')
+            self.get_logger().warning('Place position outside workspace')
+            self.publish_status('FAILED')
             return
 
         self.sequence_steps = [
             ('gripper_start', self.gripper_start_value, 'set gripper start position'),
             ('arm', (pick_x, pick_y, pick_z + self.pick_clearance, pick_w), 'above pick'),
             ('gripper', True, 'open gripper'),
-            ('arm', (pick_x, pick_y, pick_z+0.03, pick_w), 'lower to pick'),
+            ('cartesian', (pick_x, pick_y, pick_z+0.03, pick_w), 'lower to pick'),
             ('gripper', False, 'grasp object'),
-            ('arm', (pick_x, pick_y, pick_z + self.pick_clearance, pick_w), 'lift object'),
+            ('cartesian', (pick_x, pick_y, pick_z + self.pick_clearance, pick_w), 'lift object'),
             ('arm', (place_x, place_y, place_z + self.place_clearance, place_w), 'above place'),
-            ('arm', (place_x, place_y, place_z+0.03, place_w), 'lower to place'),
+            ('cartesian', (place_x, place_y, place_z+0.03, place_w), 'lower to place'),
             ('gripper', True, 'release object'),
-            ('arm', (place_x, place_y, place_z + self.place_clearance, place_w), 'lift gripper'),
+            ('cartesian', (place_x, place_y, place_z + self.place_clearance, place_w), 'lift gripper'),
             ('arm', self.home_pose, 'return home'),
         ]
         self.step_index = 0
@@ -139,6 +149,8 @@ class RX200MoveItActionClient(Node):
         try:
             if kind == 'arm':
                 self.send_ee_pose(*value)
+            elif kind == 'cartesian':
+                self.send_ee_pose(*value, cartesian=True)
             elif kind == 'gripper_start':
                 self.send_gr_pose(position = value)
             else:
@@ -153,7 +165,7 @@ class RX200MoveItActionClient(Node):
         self.publish_status('FAILED')
         # The robot may be in an unsafe/unexpected pose; do not auto-home on failure.
 
-    def send_ee_pose(self, x, y, z, w=1.0):
+    def send_ee_pose(self, x, y, z, w=1.0, cartesian=False):
         # MoveGroup goal structure from the lecturer, pose calculation from GitHub.
         p = PoseStamped()
         p.header.frame_id = self.ref_frame
@@ -186,6 +198,10 @@ class RX200MoveItActionClient(Node):
             f'pitch={math.degrees(pitch):.1f} deg, '
             f'yaw={math.degrees(yaw):.1f} deg, frame={self.ref_frame}'
         )
+
+        if cartesian:
+            self.plan_cartesian_path(p)
+            return
 
         req = MotionPlanRequest()
         req.group_name = self.arm_group
@@ -224,6 +240,56 @@ class RX200MoveItActionClient(Node):
 
         future = self._client.send_goal_async(goal, feedback_callback=self._feedback_cb)
         future.add_done_callback(self._goal_response_cb)
+
+    def plan_cartesian_path(self, pose_stamped):
+        # Compute a straight end-effector path from the CURRENT arm state.
+        # This is only used for the four short pick/place approach/retreat steps.
+        request = GetCartesianPath.Request()
+        request.header = pose_stamped.header
+        request.start_state.is_diff = True
+        request.group_name = self.arm_group
+        request.link_name = self.ee_link
+        request.waypoints = [pose_stamped.pose]
+        request.max_step = 0.005          # 5 mm interpolation resolution
+        request.jump_threshold = 1.5      # Reject unusually large joint jumps
+        request.avoid_collisions = True
+        request.max_velocity_scaling_factor = 0.10
+        request.max_acceleration_scaling_factor = 0.10
+
+        future = self._cartesian_client.call_async(request)
+        future.add_done_callback(self._cartesian_path_cb)
+
+    def _cartesian_path_cb(self, future):
+        try:
+            result = future.result()
+            self.get_logger().info(
+                f'Cartesian path fraction: {result.fraction:.3f}'
+            )
+            if result.error_code.val != MoveItErrorCodes.SUCCESS:
+                self.fail_sequence(
+                    f'Cartesian planning failed: code {result.error_code.val}'
+                )
+                return
+
+            # Never execute a partial approach or lift.
+            if result.fraction < 0.999 or not result.solution.joint_trajectory.points:
+                self.fail_sequence(
+                    f'Incomplete Cartesian path ({result.fraction * 100:.1f}%)'
+                )
+                return
+
+            if not self._execute_client.server_is_ready():
+                self.fail_sequence('ExecuteTrajectory action unavailable')
+                return
+
+            goal = ExecuteTrajectory.Goal()
+            goal.trajectory = result.solution
+            execute_future = self._execute_client.send_goal_async(goal)
+            # Reuse the original result callback to advance the step index only
+            # AFTER trajectory execution has completed successfully.
+            execute_future.add_done_callback(self._goal_response_cb)
+        except Exception as exc:
+            self.fail_sequence(f'Cartesian path error: {exc}')
 
     def send_gr_pose(self, open=True, position = None):
         # Based on the lecturer's joint-constrained gripper implementation.
