@@ -24,11 +24,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
-<<<<<<< HEAD
             'rx200_gui = rx200_moveit_control.main_window:main',
-=======
             "input_manager_node = rx200_moveit_control.input_manager_node:main",
->>>>>>> b7f94f99a0050250b1f7720ff3072e562fc881fa
         ],
     },
 )

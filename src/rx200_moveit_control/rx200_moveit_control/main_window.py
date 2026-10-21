@@ -1,29 +1,212 @@
+import math
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget
-from PyQt5.QtCore import Qt
+import threading
+
+import rclpy
+from rclpy.node import Node
+from std_msgs.msg import Float32MultiArray, String
+
+from PyQt5.QtCore import QObject, QTimer, pyqtSignal
+from PyQt5.QtWidgets import (QApplication, QDoubleSpinBox, QGroupBox, QHBoxLayout, QLabel, QMainWindow, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget)
+
+# GUI - Kian Curran Mahon
+# kian.curranmahon.2023@mumail.ie
+# 22367856
+
+
+# movement limits (in meteres)
+# REMINDER TO TUNE AND TEST BEFORE USING THIS WITH THE ROBOT !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+AXIS_MIN, AXIS_MAX = -0.5, 0.5
+Z_MIN, Z_MAX = 0.0, 0.4  # z is base
+SHOULDER_Z = 0.10      # base to shoulder
+MIN_REACH = 0.10       # not too close
+MAX_REACH = 0.45       # or too far
+MIN_SEPARATION = 0.03  # smallest movement between pick and place.
+
+class StatusBridge(QObject): # link between ros threads and gui
+    status = pyqtSignal(str)
+    
+class GuiNode(Node):
+    def __init__(self, on_status):
+        super().__init__('rx200_gui - group 3')
+        self.on_status = on_status
+        self.pub = self.create_publisher(Float32MultiArray, 'user_inputs', 10)
+        self.create_subscription(String, 'gui_status', self.status_callback, 10)
+        
+    def status_callback(self, msg):
+        self.on_status(msg.data)
+        
+    def send_point_data(self,pick,place):
+        msg = Float32MultiArray()
+        # send points in same order as input manager defines
+        msg.data = [float(pick[0]), float(pick[1]), float(pick[2]), float(place[0]), float(place[1]), float(place[2])]
+        self.pub.publish(msg)
+        
+    def subscriber_count(self):
+        return self.pub.get_subscription_count()
+        
+class AxisRow(QWidget):  # label and numbered box for one axis, handle updates
+    changed = pyqtSignal() # update
+
+    def __init__(self, label_text, lo, hi): # lo, hi are axix limits
+        super().__init__()
+        label = QLabel(label_text)
+        label.setMinimumWidth(30)
+
+        self.spin = QDoubleSpinBox()
+        self.spin.setRange(lo, hi)
+        self.spin.setDecimals(3)
+        self.spin.setSingleStep(0.01)
+        self.spin.setSuffix(' m')
+        self.spin.setMinimumWidth(110)
+        self.spin.setKeyboardTracking(False)  # only fire on Enter / focus loss
+
+        row = QHBoxLayout(self)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.addWidget(label)
+        row.addWidget(self.spin)
+
+        self.spin.valueChanged.connect(self._on_spin)
+
+    def _on_spin(self, metres): 
+        self.changed.emit()
+
+    def value(self):
+        return self.spin.value()
+
+
+class PointGroup(QGroupBox): # x,y,z point management
+    changed = pyqtSignal() 
+
+    def __init__(self, title):
+        super().__init__(title)
+        self.x_row = AxisRow('x', AXIS_MIN, AXIS_MAX)
+        self.y_row = AxisRow('y', AXIS_MIN, AXIS_MAX)
+        self.z_row = AxisRow('z', Z_MIN, Z_MAX)
+        layout = QVBoxLayout(self)
+        layout.addWidget(self.x_row)
+        layout.addWidget(self.y_row)
+        layout.addWidget(self.z_row)
+        self.x_row.changed.connect(self.changed)
+        self.y_row.changed.connect(self.changed)
+        self.z_row.changed.connect(self.changed)
+
+    def point(self):
+        return (self.x_row.value(), self.y_row.value(), self.z_row.value())
+
+
+def check_point(name, x, y, z): # check points are valid before moving, return error
+    r = math.hypot(x, y) # horizontal distance from base
+    reach = math.sqrt(r ** 2 + (z - SHOULDER_Z) ** 2) # straight line distance from shoulder
+    if reach > MAX_REACH:
+        return f'{name} is out of reach ({reach:.2f} m from shoulder, max {MAX_REACH:.2f} m)'
+    if r < MIN_REACH:
+        return f'{name} is too close to the base ({r:.2f} m, min {MIN_REACH:.2f} m)'
+    return None
+
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, node):
         super().__init__()
-        self.setWindowTitle("RX200 Joint Control")
-        self.resize(860, 520)
+        self.node = node
+        self.setWindowTitle('RX200 Pick and Place - Group 3')
+        self.resize(520, 560)
 
-        # Central widget and window
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        self.main_layout = QVBoxLayout()
-        central_widget.setLayout(self.main_layout)
+        central = QWidget() # define main layout
+        self.setCentralWidget(central)
+        self.main_layout = QVBoxLayout(central)
 
-        #PLACEHOLDER LABALES
-        ph = QLabel("PLACEHOLDER")
-        ph.setAlignment(Qt.AlignCenter)
-        self.main_layout.addWidget(ph)
-        
+        self.pick = PointGroup('Pick point')
+        self.place = PointGroup('Place point')
+        self.main_layout.addWidget(self.pick)
+        self.main_layout.addWidget(self.place)
+
+        self.validation_label = QLabel()
+        self.main_layout.addWidget(self.validation_label)
+
+        # render status text
+        self.log = QPlainTextEdit()
+        self.log.setReadOnly(True)
+        self.log.setMaximumHeight(110)
+        self.main_layout.addWidget(self.log)
+
+        self.send_button = QPushButton('Send to robot')
+        self.send_button.clicked.connect(self.on_send)
+        self.main_layout.addWidget(self.send_button)
+
+        # robot connection status
+        self.conn_label = QLabel()
+        self.statusBar().addPermanentWidget(self.conn_label)
+        self.conn_timer = QTimer(self)
+        self.conn_timer.timeout.connect(self.update_connection)
+        self.conn_timer.start(500)
+
+        self.pick.changed.connect(self.update_validation)
+        self.place.changed.connect(self.update_validation)
+
+        self.update_validation()
+        self.update_connection()
+
+    def find_error(self): # check if there are errors on pick/place points
+        pick, place = self.pick.point(), self.place.point()
+        error = check_point('Pick', *pick) or check_point('Place', *place)
+        if error:
+            return error
+        if math.dist(pick, place) < MIN_SEPARATION:
+            return 'Pick and place points are the same'
+        return None
+
+    def update_validation(self): # text and colour for found errors
+        error = self.find_error()
+        if error:
+            self.validation_label.setText(error)
+            self.validation_label.setStyleSheet('color: #c0392b;')
+        else:
+            self.validation_label.setText('Ready to send')
+            self.validation_label.setStyleSheet('color: #27ae60;')
+        self.send_button.setEnabled(error is None)
+
+    def update_connection(self): # display topic subscribers
+        n = self.node.subscriber_count()
+        if n > 0:
+            self.conn_label.setText(f'user_inputs: {n} subscriber(s)')
+        else:
+            self.conn_label.setText('user_inputs: no subscribers')
+
+    def on_gui_status(self, text): # render status msgs
+        self.log.appendPlainText(text)
+        self.statusBar().showMessage(text, 5000)
+
+    def on_send(self): # action for send button to send point data
+        if self.find_error():  # second sanity check, re-check points,
+            return
+        pick, place = self.pick.point(), self.place.point()
+        self.node.send_point_data(pick, place) # name must match the GuiNode method
+        msg = (f'Sent pick ({pick[0]:.3f}, {pick[1]:.3f}, {pick[2]:.3f}) -> '
+               f'place ({place[0]:.3f}, {place[1]:.3f}, {place[2]:.3f})')
+        print(msg)
+        self.statusBar().showMessage(msg, 5000)
+
+
 def main():
-        app = QApplication(sys.argv)
-        window = MainWindow()
-        window.show()
-        sys.exit(app.exec_())
-        
-if __name__ == "__main__":
+    rclpy.init()
+    app = QApplication(sys.argv)
+
+    bridge = StatusBridge()
+    node = GuiNode(bridge.status.emit)
+
+    # spin ROS in a background thread so it doesn't block the Qt event loop
+    threading.Thread(target=rclpy.spin, args=(node,), daemon=True).start()
+
+    window = MainWindow(node)
+    bridge.status.connect(window.on_gui_status)
+    window.show()
+    code = app.exec_()
+
+    node.destroy_node()
+    rclpy.shutdown()
+    sys.exit(code)
+
+
+if __name__ == '__main__':
     main()
