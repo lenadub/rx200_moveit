@@ -25,8 +25,7 @@ setup(
     entry_points={
         'console_scripts': [
             'action_client = rx200_moveit_control.action_client:main',
-            'pitch_yaw_test = rx200_moveit_control.pitch_yaw_test:main',
-            'gripper_test = rx200_moveit_control.gripper_test:main'
+            "input_manager_node = rx200_moveit_control.input_manager_node:main"
         ],
     },
 )
