@@ -37,10 +37,10 @@ class RX200MoveItActionClient(Node):
         self.gripper_start_value = 0.00
 
         # Adjust these to the physical object's height and a verified safe home pose.
-        self.pick_clearance = 0.15
+        self.pick_clearance = 0.10
         self.place_clearance = 0.10
         self.home_pose = (0.2, 0.0, 0.2, 1.0)
-        self.place_offset = 0.05
+        #self.place_offset = 0.05
 
         self.busy = False
         self.sequence_steps = []
@@ -66,10 +66,10 @@ class RX200MoveItActionClient(Node):
         min_reach = 0.275
         max_reach = 0.55
 
-        # Allow for tiny float32 rounding at the experimentally tested limits.
-        if distance < min_reach - 1e-5:
+       
+        if distance < min_reach :
             return False
-        if distance > max_reach + 1e-5:
+        if distance > max_reach:
             return False
         return True
 
@@ -100,8 +100,7 @@ class RX200MoveItActionClient(Node):
 
         pick_x, pick_y, pick_z, pick_w, place_x, place_y, place_z, place_w = msg.data
 
-        # Keep the team's current w=+/-1 input contract for compatibility.
-        # The target orientation is calculated from XYZ inside send_ee_pose().
+        
         if not math.isclose(abs(pick_w), 1.0, abs_tol=1e-4) or not math.isclose(
             abs(place_w), 1.0, abs_tol=1e-4
         ):
