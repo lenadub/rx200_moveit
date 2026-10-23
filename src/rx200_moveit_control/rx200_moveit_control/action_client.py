@@ -93,20 +93,20 @@ class RX200MoveItActionClient(Node):
             self.publish_status('FAILED')
             return
 
-        if len(msg.data) != 8 or not all(math.isfinite(v) for v in msg.data):
+        if len(msg.data) != 6 or not all(math.isfinite(v) for v in msg.data):
             self.get_logger().warning('Expected 8 finite floats: pick xyzw, place xyzw')
             self.publish_status('FAILED')
             return
 
-        pick_x, pick_y, pick_z, pick_w, place_x, place_y, place_z, place_w = msg.data
+        pick_x, pick_y, pick_z, place_x, place_y, place_z = msg.data
 
         
-        if not math.isclose(abs(pick_w), 1.0, abs_tol=1e-4) or not math.isclose(
-            abs(place_w), 1.0, abs_tol=1e-4
-        ):
-            self.get_logger().warning('Invalid quaternion: w must be +1 or -1')
-            self.publish_status('FAILED')
-            return
+        #if not math.isclose(abs(pick_w), 1.0, abs_tol=1e-4) or not math.isclose(
+        #    abs(place_w), 1.0, abs_tol=1e-4
+        #):
+        #    self.get_logger().warning('Invalid quaternion: w must be +1 or -1')
+        #    self.publish_status('FAILED')
+        #    return
 
         if not self.validate_position(pick_x, pick_y):
             self.get_logger().warning('Pick position outside workspace')
@@ -120,15 +120,15 @@ class RX200MoveItActionClient(Node):
 
         self.sequence_steps = [
             ('gripper_start', self.gripper_start_value, 'set gripper start position'),
-            ('arm', (pick_x, pick_y, pick_z + self.pick_clearance, pick_w), 'above pick'),
+            ('arm', (pick_x, pick_y, pick_z + self.pick_clearance), 'above pick'),
             ('gripper', True, 'open gripper'),
-            ('cartesian', (pick_x, pick_y, pick_z+0.04, pick_w), 'lower to pick'),
+            ('cartesian', (pick_x, pick_y, pick_z+0.04), 'lower to pick'),
             ('gripper', False, 'grasp object'),
-            ('cartesian', (pick_x, pick_y, pick_z + self.pick_clearance, pick_w), 'lift object'),
-            ('arm', (place_x, place_y, place_z + self.place_clearance, place_w), 'above place'),
-            ('cartesian', (place_x, place_y, place_z+0.04, place_w), 'lower to place'),
+            ('cartesian', (pick_x, pick_y, pick_z + self.pick_clearance), 'lift object'),
+            ('arm', (place_x, place_y, place_z + self.place_clearance), 'above place'),
+            ('cartesian', (place_x, place_y, place_z+0.04), 'lower to place'),
             ('gripper', True, 'release object'),
-            ('cartesian', (place_x, place_y, place_z + self.place_clearance, place_w), 'lift gripper'),
+            ('cartesian', (place_x, place_y, place_z + self.place_clearance), 'lift gripper'),
             ('arm', self.home_pose, 'return home'),
         ]
         self.step_index = 0
