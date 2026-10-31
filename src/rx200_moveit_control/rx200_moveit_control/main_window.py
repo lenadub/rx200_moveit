@@ -6,8 +6,8 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import Float32MultiArray, String
 
-from PyQt5.QtCore import QObject, QTimer, pyqtSignal
-from PyQt5.QtWidgets import (QApplication, QDoubleSpinBox, QGroupBox, QHBoxLayout, QLabel, QMainWindow, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget)
+from PyQt5.QtCore import QObject, QTimer, pyqtSignal, Qt
+from PyQt5.QtWidgets import (QApplication, QDoubleSpinBox, QGroupBox, QHBoxLayout, QLabel, QMainWindow, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget, QSizePolicy)
 
 # GUI - Kian Curran Mahon
 # kian.curranmahon.2023@mumail.ie
@@ -69,13 +69,14 @@ class AxisRow(QWidget):  # label and numbered box for one axis, handle updates
         self.spin.setDecimals(3)
         self.spin.setSingleStep(0.01)
         self.spin.setSuffix(' m')
-        self.spin.setMinimumWidth(110)
         self.spin.setKeyboardTracking(False)  # only fire on Enter / focus loss
 
+        self.spin.setFixedWidth(120)    # pick/place is a fixed width
         row = QHBoxLayout(self)
         row.setContentsMargins(0, 0, 0, 0)
         row.addWidget(label)
         row.addWidget(self.spin)
+        row.addStretch() 
 
         self.spin.valueChanged.connect(self._on_spin)
 
@@ -140,8 +141,8 @@ class MainWindow(QMainWindow):
 
         self.pick = PointGroup('Pick point')
         self.place = PointGroup('Place point')
-        self.main_layout.addWidget(self.pick)
-        self.main_layout.addWidget(self.place)
+        self.main_layout.addWidget(self.pick,0, Qt.AlignLeft)
+        self.main_layout.addWidget(self.place, 0, Qt.AlignLeft)
 
         self.validation_label = QLabel()
         self.main_layout.addWidget(self.validation_label)
@@ -149,8 +150,7 @@ class MainWindow(QMainWindow):
         # render status text
         self.log = QPlainTextEdit()
         self.log.setReadOnly(True)
-        self.log.setMaximumHeight(110)
-        self.main_layout.addWidget(self.log)
+        self.main_layout.addWidget(self.log, 1)
 
         self.send_button = QPushButton('Send to robot')
         self.send_button.clicked.connect(self.on_send)
