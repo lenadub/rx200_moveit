@@ -6,27 +6,29 @@ from std_msgs.msg import String
 
 class InputManagerNode(Node):
     def __init__(self):
-        super().__init__('input_manager')
-        self.get_logger().info("Input Manager Node has been started.")
-        self.robot_publisher = self.create_publisher(Float32MultiArray, 'pick_place_request', 10)
-        self.status_subscriber = self.create_subscription(String, 'robot_status', self.status_callback, 10)
-        self.inputs_subscriber = self.create_subscription(Float32MultiArray, 'user_inputs', self.user_inputs_callback, 10)
-        self.gui_status_publisher = self.create_publisher(String, 'gui_status', 10)
+            super().__init__('input_manager')
+            self.get_logger().info("Input Manager Node has been started.")
+            self.robot_publisher = self.create_publisher(Float32MultiArray, 'pick_place_request', 10) #Publisher for sending pick and place requests to the action client
+            self.status_subscriber = self.create_subscription(String, 'robot_status', self.status_callback, 10) #Subscriber for receiving robot status updates from the action client
+            self.inputs_subscriber = self.create_subscription(Float32MultiArray, 'user_inputs', self.user_inputs_callback, 10) #Subscriber for receiving user inputs from the GUI
+            self.gui_status_publisher = self.create_publisher(String, 'gui_status', 10) #Publisher for sending status updates to the GUI
 
     def validate_input(self, pick_x, pick_y, pick_z, place_x, place_y, place_z):
+        """Validate that all inputs are finite numbers."""
         coordinates = (pick_x, pick_y, pick_z, place_x, place_y, place_z)
         for coordinate in coordinates:
             try:
-                float(coordinate)
+                float(coordinate) #We try to convert the input to a float first, and then check if it is finite.
                 if not math.isfinite(float(coordinate)):
                     self.get_logger().error(f"Invalid input: {coordinate} is not a finite number.")
                     return False
-            except (ValueError, TypeError):
+            except (ValueError, TypeError): #If the input cannot be converted to a float, we catch the exception and log an error.
                 self.get_logger().error(f"Invalid input: {coordinate} is not a valid float.")
                 return False
         return True
     
     def send_request(self, pick_x, pick_y, pick_z, place_x, place_y, place_z):
+        """Send a pick and place request to the action client if the inputs are valid."""
         if self.validate_input(pick_x, pick_y, pick_z, place_x, place_y, place_z):
             request_msg = Float32MultiArray()
             request_msg.data = [float(pick_x), float(pick_y), float(pick_z), float(place_x), float(place_y), float(place_z)]
@@ -38,10 +40,14 @@ class InputManagerNode(Node):
             self.send_gui_status("Request not sent due to invalid input.")
 
     def status_callback(self, msg):
+        """Callback function for receiving robot status updates from the action client. It logs the status and sends it to the GUI.
+        """
         self.get_logger().info(f"Robot status: {msg.data}")
         self.send_gui_status(f"Robot status: {msg.data}")
 
     def user_inputs_callback(self, msg):
+        """Callback function for receiving user inputs from the GUI. It validates the inputs and sends a request to the action client if valid.
+        """
         coordinates = msg.data
         if len(coordinates) != 6:
             self.get_logger().warn(f"Expected 6 coordinates, received {len(coordinates)}.")
@@ -50,6 +56,7 @@ class InputManagerNode(Node):
         self.send_request(*coordinates)
 
     def send_gui_status(self, text):
+        """Send a status update to the GUI."""
         msg = String()
         msg.data = text
         self.gui_status_publisher.publish(msg)
@@ -58,11 +65,12 @@ class InputManagerNode(Node):
 def main(args = None):
     rclpy.init(args=args)
     node = InputManagerNode()
+    #Handle KeyboardInterrupt (Ctrl+C) to avoid error messages on shutdown.
     try:
         rclpy.spin(node)
-    except KeyboardInterrupt:
+    except KeyboardInterrupt: 
         pass
-    if rclpy.ok():
+    if rclpy.ok(): #Check if rclpy is still running before shutting down. This helps us get rid of error messages when the node is shut down.
         rclpy.shutdown()
 
 
