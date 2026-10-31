@@ -23,6 +23,17 @@ MIN_REACH = 0.10       # not too close
 MAX_REACH = 0.45       # or too far
 MIN_SEPARATION = 0.03  # smallest movement between pick and place.
 
+# node topics
+# near your other constants
+USER_INPUTS_TOPIC = 'user_inputs'
+ACTION_TOPIC = 'user_inputs'
+
+CONNECTIONS = {
+    'user_inputs': USER_INPUTS_TOPIC,
+    'action_node': ACTION_TOPIC,
+}
+
+
 class StatusBridge(QObject): # link between ros threads and gui
     status = pyqtSignal(str)
     
@@ -30,7 +41,7 @@ class GuiNode(Node):
     def __init__(self, on_status):
         super().__init__('rx200_gui')
         self.on_status = on_status
-        self.pub = self.create_publisher(Float32MultiArray, 'user_inputs', 10)
+        self.pub = self.create_publisher(Float32MultiArray, 'USER_INPUTS_TOPIC', 10)
         self.create_subscription(String, 'gui_status', self.status_callback, 10)
         
     def status_callback(self, msg):
@@ -42,8 +53,8 @@ class GuiNode(Node):
         msg.data = [float(pick[0]), float(pick[1]), float(pick[2]), float(place[0]), float(place[1]), float(place[2])]
         self.pub.publish(msg)
         
-    def subscriber_count(self):
-        return self.pub.get_subscription_count()
+    def subscriber_count(self, topic):
+        return self.count_subscribers(topic)
         
 class AxisRow(QWidget):  # label and numbered box for one axis, handle updates
     changed = pyqtSignal() # update
@@ -104,13 +115,24 @@ def check_point(name, x, y, z): # check points are valid before moving, return e
         return f'{name} is too close to the base ({r:.2f} m, min {MIN_REACH:.2f} m)'
     return None
 
+class RobotConnectionIndicator(QLabel): #robot status indicator and text for subscriber counts
+    def __init__(self,name):
+        super().__init__()
+        self.name = name
+        self.set_count(0)
+ 
+    def set_count(self, n):
+        colour = "green" if n > 0 else 'red'
+        text = f'{n} subscriber(s)' if n > 0 else 'No subscribers'
+        self.setText(f'<span style="color:{colour};">&#9679;</span> {self.name}: {text}')
+
 
 class MainWindow(QMainWindow):
     def __init__(self, node):
         super().__init__()
         self.node = node
-        self.setWindowTitle('RX200 Pick and Place - Group 3')
-        self.resize(520, 560)
+        self.setWindowTitle('RX200 Pick and Place - Group 2')
+        self.resize(900, 800)
 
         central = QWidget() # define main layout
         self.setCentralWidget(central)
@@ -133,6 +155,37 @@ class MainWindow(QMainWindow):
         self.send_button = QPushButton('Send to robot')
         self.send_button.clicked.connect(self.on_send)
         self.main_layout.addWidget(self.send_button)
+        
+        # status bar on bottom
+        statusBar = self.statusBar()
+        statusBar.setSizeGripEnabled(False)
+        
+        self.validation_label = QLabel()
+        self.validation_label.setToolTip('')
+ 
+        statusBar_row = QWidget()
+        row = QHBoxLayout(statusBar_row)
+        row.setContentsMargins(6, 0, 6, 0)
+        row.addWidget(self.validation_label, 1)
+        row.setSpacing(16)
+
+        self.indicators = []   # (topic, indicator) pairs
+        for label, topic in CONNECTIONS.items():
+            indicator = RobotConnectionIndicator(label)
+            row.addWidget(indicator)
+            self.indicators.append((topic, indicator))
+
+        statusBar.addPermanentWidget(statusBar_row, 1)         
+
+        self.conn_timer = QTimer(self)
+        self.conn_timer.timeout.connect(self.update_connection)
+        self.conn_timer.start(500)
+ 
+        self.pick.changed.connect(self.update_validation)
+        self.place.changed.connect(self.update_validation)
+ 
+        self.update_validation()
+        self.update_connection()
 
         # robot connection status
         self.conn_label = QLabel()
@@ -167,12 +220,9 @@ class MainWindow(QMainWindow):
         self.send_button.setEnabled(error is None)
 
     def update_connection(self): # display topic subscribers
-        n = self.node.subscriber_count()
-        if n > 0:
-            self.conn_label.setText(f'user_inputs: {n} subscriber(s)')
-        else:
-            self.conn_label.setText('user_inputs: no subscribers')
-
+        for topic, indicator in self.indicators:
+          indicator.set_count(self.node.subscriber_count(topic))
+          
     def on_gui_status(self, text): # render status msgs
         self.log.appendPlainText(text)
         self.statusBar().showMessage(text, 5000)
