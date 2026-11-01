@@ -2,10 +2,12 @@
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
   <name>rx200_moveit_control</name>
-  <version>0.0.0</version>
-  <description>TODO: Package description</description>
-  <maintainer email="master26@todo.todo">master26</maintainer>
-  <license>TODO: License declaration</license>
+  <version>1.0.0</version>
+  <description>ROS2 package containing the GUI, input manager and MoveIt action client for the RX200 robot.</description>
+  <maintainer email="KIAN.CURRANMAHON.2023@mumail.ie">Kian Anthony Curran Mahon</maintainer>
+  <maintainer email="LENA.DUBOIS.2027@mumail.ie">Léna Isabel Estelle Dubois</maintainer>
+  <maintainer email="CAELAN.ORAGHAILL.2023@mumail.ie">Caelan Pol Chaney Ó Raghaill</maintainer>
+  <license>None</license>
 
   <depend>rclpy</depend>
   <depend>std_msgs</depend>
