@@ -26,8 +26,7 @@ setup(
         'console_scripts': [
             'action_client = rx200_moveit_control.action_client:main',
             "input_manager_node = rx200_moveit_control.input_manager_node:main",
-            'rx200_gui = rx200_moveit_control.main_window:main'
-
+            'rx200_gui = rx200_moveit_control.main_window:main',
         ],
     },
 )
