@@ -1,8 +1,10 @@
 # rx200_moveit
 
+ROS2 project for controlling the Interbotix RX200 robot using MoveIt and a GUI. The GUI sends pick and place coordinates to the input manager, which checks them before forwarding the request to the action client. The action client controls the robot and sends status updates back to the GUI.
+
 ## Build
 
-From the workspace folder, run:
+From the workspace folder, source the Interbotix workspace if needed, then run:
 
 ```bash
 colcon build --symlink-install
@@ -63,4 +65,19 @@ Keep all terminals open while using the project.
 
 ## Usage
 
-Enter the pick and place coordinates in the GUI and submit the request.
+Once the GUI opens, enter the pick and place coordinates in the corresponding fields:
+
+- **Pick:** X, Y, Z coordinates of the object.
+- **Place:** X, Y, Z coordinates of the destination.
+
+Enter the coordinates as numerical values in metres, then click the submit button to send the request.
+
+The input manager checks the coordinates before sending them to the action client. The GUI displays the robot's status during execution.
+
+You can enter new coordinates after the movement is finished, without restarting the nodes or rebuilding the workspace.
+
+## Team Members
+
+- Kian Anthony Curran Mahon
+- Léna Isabel Estelle Dubois
+- Caelan Pol Chaney Ó Raghaill
