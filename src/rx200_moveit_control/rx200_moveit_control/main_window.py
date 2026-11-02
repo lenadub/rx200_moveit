@@ -19,9 +19,9 @@ from PyQt5.QtWidgets import (QApplication, QDoubleSpinBox, QGroupBox, QHBoxLayou
 AXIS_MIN, AXIS_MAX = -0.5, 0.5
 Z_MIN, Z_MAX = 0.0, 0.4  # z is base
 SHOULDER_Z = 0.10      # base to shoulder
-MIN_REACH = 0.10       # not too close
-MAX_REACH = 0.45       # or too far
-MIN_SEPARATION = 0.03  # smallest movement between pick and place.
+MIN_REACH = 0.27       # not too close
+MAX_REACH = 0.55      # or too far
+MIN_SEPARATION = 0.05 # smallest movement between pick and place.
 
 # node topics
 # near your other constants
@@ -171,7 +171,7 @@ class MainWindow(QMainWindow):
 
         self.indicators = []   # (topic, indicator) pairs
         for label, topic in CONNECTIONS.items():
-            indicator = RobotConnectionIndicator(label)
+            indicat0.10  or = RobotConnectionIndicator(label)
             row.addWidget(indicator)
             self.indicators.append((topic, indicator))
 
