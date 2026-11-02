@@ -15,17 +15,18 @@ setup(
     zip_safe=True,
     maintainer='master26',
     maintainer_email='master26@todo.todo',
-    description='TODO: Package description',
+    description='ROS 2 MoveIt Action Client for the Interbotix RX200 robotic arm',
     license='TODO: License declaration',
     extras_require={
         'test': [
-            'pytest',
-        ],
-    },
+            'pytest',        ],
+    },        
+    
     entry_points={
         'console_scripts': [
-            'rx200_gui = rx200_moveit_control.main_window:main',
+            'action_client = rx200_moveit_control.action_client:main',
             "input_manager_node = rx200_moveit_control.input_manager_node:main",
+            'rx200_gui = rx200_moveit_control.main_window:main',
         ],
     },
 )

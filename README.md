@@ -76,6 +76,16 @@ The input manager checks the coordinates before sending them to the action clien
 
 You can enter new coordinates after the movement is finished, without restarting the nodes or rebuilding the workspace.
 
+## Limits 
+
+There are limits to valid coordinates that the system will accept that are handled by the GUI. 
+Negative values of z are rejected and the max z height is 0.4m 
+
+Through testing of the physical arm, the max reliable reach was determined to be 0.55m and the minumum was 0.275m 
+Coordinates within 0.03m in the same axis (i.e. only change x from 0.4 - 0.37) are treated as the same coordinate 
+
+These limits are in place to prevent potentially unsafe movement of the robot arm and due to the slight error in location that arises during movement
+
 ## Team Members
 
 - Kian Anthony Curran Mahon
