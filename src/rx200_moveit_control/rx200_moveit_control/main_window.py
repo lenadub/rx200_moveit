@@ -41,7 +41,7 @@ class GuiNode(Node):
     def __init__(self, on_status):
         super().__init__('rx200_gui')
         self.on_status = on_status
-        self.pub = self.create_publisher(Float32MultiArray, 'USER_INPUTS_TOPIC', 10)
+        self.pub = self.create_publisher(Float32MultiArray, USER_INPUTS_TOPIC, 10)
         self.create_subscription(String, 'gui_status', self.status_callback, 10)
         
     def status_callback(self, msg):
