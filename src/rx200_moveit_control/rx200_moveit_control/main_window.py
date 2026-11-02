@@ -19,9 +19,9 @@ from PyQt5.QtWidgets import (QApplication, QDoubleSpinBox, QGroupBox, QHBoxLayou
 AXIS_MIN, AXIS_MAX = -0.5, 0.5
 Z_MIN, Z_MAX = 0.0, 0.4  # z is base
 SHOULDER_Z = 0.10      # base to shoulder
-MIN_REACH = 0.10       # not too close
-MAX_REACH = 0.45       # or too far
-MIN_SEPARATION = 0.03  # smallest movement between pick and place.
+MIN_REACH = 0.27       # not too close
+MAX_REACH = 0.55      # or too far
+MIN_SEPARATION = 0.05 # smallest movement between pick and place.
 
 # node topics
 # near your other constants
@@ -41,7 +41,7 @@ class GuiNode(Node):
     def __init__(self, on_status):
         super().__init__('rx200_gui')
         self.on_status = on_status
-        self.pub = self.create_publisher(Float32MultiArray, 'USER_INPUTS_TOPIC', 10)
+        self.pub = self.create_publisher(Float32MultiArray, USER_INPUTS_TOPIC, 10)
         self.create_subscription(String, 'gui_status', self.status_callback, 10)
         
     def status_callback(self, msg):
