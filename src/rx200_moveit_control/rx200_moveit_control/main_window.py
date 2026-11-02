@@ -171,7 +171,7 @@ class MainWindow(QMainWindow):
 
         self.indicators = []   # (topic, indicator) pairs
         for label, topic in CONNECTIONS.items():
-            indicat0.10  or = RobotConnectionIndicator(label)
+            indicator = RobotConnectionIndicator(label)
             row.addWidget(indicator)
             self.indicators.append((topic, indicator))
 
